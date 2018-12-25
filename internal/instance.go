@@ -43,6 +43,12 @@ type Instance struct {
 }
 
 func (i *Instance) RunPacketRead() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error caught: ", r)
+		}
+	}()
+
 	for {
 		addr, data := i.readPacket()
 		i.Lock()
