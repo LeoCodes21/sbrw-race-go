@@ -101,7 +101,7 @@ func (c *Client) HandlePacket(data []byte) {
 		c.Session.IncrementSyncCount()
 	} else if data[0] == 1 && data[6] == 0xff && data[7] == 0xff && data[8] == 0xff && data[9] == 0xff {
 		c.handleInfoBeforeSync(data)
-	} else if data[0] == 1{
+	} else if data[0] == 1 && len(data) > 16 {
 		c.handleInfoAfterSync(data)
 	}
 }
