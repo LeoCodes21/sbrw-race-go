@@ -155,10 +155,10 @@ func (c *Client) handleInfoBeforeSync(data []byte) {
 // Handles a SYNC-START packet from the client.
 func (c *Client) handleSyncStart(data []byte) {
 	c.SyncState = SyncStateStart
-	packetTime := binary.BigEndian.Uint16(data[5:7])
-	packetCliTime := binary.BigEndian.Uint16(data[7:9])
-	syncCounter := binary.BigEndian.Uint16(data[9:11])
-	syncValue := binary.BigEndian.Uint16(data[11:13])
+	//packetTime := binary.BigEndian.Uint16(data[5:7])
+	//packetCliTime := binary.BigEndian.Uint16(data[7:9])
+	//syncCounter := binary.BigEndian.Uint16(data[9:11])
+	//syncValue := binary.BigEndian.Uint16(data[11:13])
 	sessionId := binary.BigEndian.Uint32(data[16:20])
 	slotByte := data[20]
 
