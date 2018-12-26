@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"encoding/hex"
 	"encoding/binary"
+	"runtime/debug"
 )
 
 // Start the UDP server and begin listening for packets
@@ -46,6 +47,7 @@ func (i *Instance) RunPacketRead() {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("Error caught: ", r)
+			debug.PrintStack()
 		}
 	}()
 
