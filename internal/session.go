@@ -25,12 +25,11 @@ func (s *Session) IncrementSyncCount() {
 
 	if s.SyncedClients == uint32(s.MaxClients) {
 		s.SyncedClients = 0
+		s.SyncCount++
 
 		for _, client := range s.Clients {
 			client.SendSyncResponse()
 		}
-
-		s.SyncCount++
 	}
 }
 

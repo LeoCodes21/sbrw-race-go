@@ -97,16 +97,27 @@ func (c *Client) HandlePacket(data []byte) {
 	} else if len(data) == 22 && data[3] == 0x07 {
 		c.handleSync(data)
 	} else if len(data) == 18 && data[3] == 0x07 {
-		c.SyncState = SyncStateKeepAlive
-		c.Session.IncrementSyncCount()
+		if c.Session == nil {
+			fmt.Println("NIL SESSION")
+		} else {
+			c.SyncState = SyncStateKeepAlive
+			c.Session.IncrementSyncCount()
+		}
 	} else if data[0] == 1 && data[6] == 0xff && data[7] == 0xff && data[8] == 0xff && data[9] == 0xff {
 		c.handleInfoBeforeSync(data)
 	} else if data[0] == 1 && len(data) > 16 {
 		c.handleInfoAfterSync(data)
+	} else {
+		fmt.Println("UNKNOWN PACKET")
 	}
 }
 
 func (c *Client) handleInfoAfterSync(data []byte) {
+	if c.Session == nil {
+		fmt.Println("NIL SESSION")
+		return
+	}
+
 	for _, c2 := range c.Session.Clients {
 		if c2.Port() != c.Port() {
 			c2.Send(transformPostByteTypeB(c2, data, c))
@@ -117,6 +128,11 @@ func (c *Client) handleInfoAfterSync(data []byte) {
 // Handles a player-info-before-sync packet from the client.
 func (c *Client) handleInfoBeforeSync(data []byte) {
 	c.Parser.Parse(data)
+
+	if c.Session == nil {
+		fmt.Println("NIL SESSION")
+		return
+	}
 
 	if c.Session.IsAllPlayerInfoBeforeOk() {
 		for _, c2 := range c.Session.Clients {
@@ -154,10 +170,10 @@ func (c *Client) handleSyncStart(data []byte) {
 	}
 
 	c.SessionSlot = slotByte >> 5
+	c.Session = session
 
 	if _, inSession := session.Clients[c.SessionSlot]; !inSession {
 		session.Clients[c.SessionSlot] = c
-		c.Session = session
 		session.ClientCount++
 		fmt.Printf("* Added client to session!\n")
 		c.SendSyncStart()
@@ -167,6 +183,11 @@ func (c *Client) handleSyncStart(data []byte) {
 }
 
 func (c *Client) handleSync(data []byte) {
+	if c.Session == nil {
+		fmt.Println("NIL SESSION")
+		return
+	}
+
 	c.SyncState = SyncStateSync
 	c.Session.IncrementSyncCount()
 }
@@ -270,9 +291,9 @@ func (c *Client) SendHelloResponse() (int, error) {
 	// Second packet type
 	buffer.WriteByte(1)
 	// Time
-	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+30)
+	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime-30)
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	// CRC
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
@@ -286,7 +307,7 @@ func (c *Client) SendSync() (int, error) {
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+c.Ping)
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime-c.Ping)
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -311,7 +332,7 @@ func (c *Client) SendKeepAlive() (int, error) {
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+c.Ping)
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime-c.Ping)
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -342,7 +363,7 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Time
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+c.Ping)
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime-c.Ping)
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	// Sync-counter
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
