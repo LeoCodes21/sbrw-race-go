@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync"
 	"encoding/binary"
+	"fmt"
 )
 
 // Start the UDP server and begin listening for packets
@@ -52,7 +53,11 @@ func (i *Instance) RunPacketRead() {
 			i.Clients[addr.Port] = NewClient(i, i.listener, addr, binary.BigEndian.Uint16(data[69:71]))
 			i.Clients[addr.Port].SendHelloResponse()
 		} else {
-			i.Clients[addr.Port].HandlePacket(data)
+			if _, exists := i.Clients[addr.Port]; exists {
+				i.Clients[addr.Port].HandlePacket(data)
+			} else {
+				fmt.Println("UNKNOWN CLIENT")
+			}
 		}
 
 		i.Unlock()
