@@ -3,9 +3,7 @@ package internal
 import (
 	"net"
 	"sync"
-	"fmt"
 	"encoding/binary"
-	"runtime/debug"
 )
 
 // Start the UDP server and begin listening for packets
@@ -43,13 +41,6 @@ type Instance struct {
 }
 
 func (i *Instance) RunPacketRead() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Error caught: ", r)
-			debug.PrintStack()
-		}
-	}()
-
 	for {
 		addr, data := i.readPacket()
 		i.Lock()

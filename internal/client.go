@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"runtime/debug"
+	"encoding/hex"
 )
 
 type SyncState uint
@@ -86,6 +88,14 @@ func (c *Client) Send(data []byte) (int, error) {
 
 // Processes a data packet from the client.
 func (c *Client) HandlePacket(data []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error while processing packet: ", r)
+			debug.PrintStack()
+			fmt.Println(hex.Dump(data))
+		}
+	}()
+
 	c.Ping = uint16(time.Now().Sub(c.LastPacketTime).Seconds() * 1000)
 	c.LastPacketTime = time.Now()
 
@@ -102,9 +112,9 @@ func (c *Client) HandlePacket(data []byte) {
 			c.SyncState = SyncStateKeepAlive
 			c.Session.IncrementSyncCount()
 		}
-	} else if data[0] == 1 && data[6] == 0xff && data[7] == 0xff && data[8] == 0xff && data[9] == 0xff {
+	} else if len(data) > 16 && data[0] == 1 && data[6] == 0xff && data[7] == 0xff && data[8] == 0xff && data[9] == 0xff {
 		c.handleInfoBeforeSync(data)
-	} else if data[0] == 1 && len(data) > 16 {
+	} else if len(data) > 16 && data[0] == 1 {
 		c.handleInfoAfterSync(data)
 	} else {
 		fmt.Println("UNKNOWN PACKET")
@@ -152,20 +162,20 @@ func (c *Client) handleSyncStart(data []byte) {
 	sessionId := binary.BigEndian.Uint32(data[16:20])
 	slotByte := data[20]
 
-	fmt.Println("SYNC-START:")
-	fmt.Printf("PktTime     = %d\n", packetTime)
-	fmt.Printf("PktCliTime  = %d\n", packetCliTime)
-	fmt.Printf("SyncCounter = %d\n", syncCounter)
-	fmt.Printf("SyncValue   = %d\n", syncValue)
-	fmt.Printf("SessionId   = %d\n", sessionId)
-	fmt.Printf("SlotByte    = %x\n", slotByte)
+	//fmt.Println("SYNC-START:")
+	//fmt.Printf("PktTime     = %d\n", packetTime)
+	//fmt.Printf("PktCliTime  = %d\n", packetCliTime)
+	//fmt.Printf("SyncCounter = %d\n", syncCounter)
+	//fmt.Printf("SyncValue   = %d\n", syncValue)
+	//fmt.Printf("SessionId   = %d\n", sessionId)
+	//fmt.Printf("SlotByte    = %x\n", slotByte)
 
 	session, exists := c.Instance.Sessions[sessionId]
 
 	if !exists {
 		c.Instance.Sessions[sessionId] = NewSession(sessionId, (slotByte&0x0F)>>1)
 		session = c.Instance.Sessions[sessionId]
-		fmt.Printf("* Created new session!\n")
+		//fmt.Printf("* Created new session!\n")
 	}
 
 	c.SessionSlot = slotByte >> 5
@@ -174,7 +184,7 @@ func (c *Client) handleSyncStart(data []byte) {
 	if _, inSession := session.Clients[c.SessionSlot]; !inSession {
 		session.Clients[c.SessionSlot] = c
 		session.ClientCount++
-		fmt.Printf("* Added client to session!\n")
+		//fmt.Printf("* Added client to session!\n")
 		c.SendSyncStart()
 	}
 
