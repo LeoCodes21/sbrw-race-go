@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"encoding/hex"
 )
 
 type SyncState uint
@@ -79,8 +78,8 @@ func (c *Client) Port() int {
 
 // Sends a data buffer to the client.
 func (c *Client) Send(data []byte) (int, error) {
-	fmt.Printf("Sending %d bytes to %s:\n", len(data), c.Address.String())
-	fmt.Println(hex.Dump(data))
+	//fmt.Printf("Sending %d bytes to %s:\n", len(data), c.Address.String())
+	//fmt.Println(hex.Dump(data))
 
 	return c.Connection.WriteToUDP(data, c.Address)
 }
