@@ -80,9 +80,6 @@ func (c *Client) Port() int {
 
 // Sends a data buffer to the client.
 func (c *Client) Send(data []byte) (int, error) {
-	//fmt.Printf("Sending %d bytes to %s:\n", len(data), c.Address.String())
-	//fmt.Println(hex.Dump(data))
-
 	return c.Connection.WriteToUDP(data, c.Address)
 }
 
@@ -315,8 +312,8 @@ func (c *Client) SendSync() (int, error) {
 	buffer.WriteByte(0)
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
-	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+c.Ping)
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
+	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+c.Session.GetPingDeviation())
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime + c.Session.GetHelloTimeDeviation())
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -340,8 +337,8 @@ func (c *Client) SendKeepAlive() (int, error) {
 	buffer.WriteByte(0)
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
-	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+c.Ping)
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
+	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff()+c.Session.GetPingDeviation())
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime + c.Session.GetHelloTimeDeviation())
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {

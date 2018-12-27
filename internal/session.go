@@ -1,5 +1,7 @@
 package internal
 
+import "math"
+
 type Session struct {
 	Clients       map[byte]*Client
 	ClientCount   byte
@@ -41,4 +43,26 @@ func (s *Session) IsAllPlayerInfoBeforeOk() bool {
 	}
 
 	return true
+}
+
+func (s *Session) GetHelloTimeDeviation() uint16 {
+	data := make([]uint16, s.ClientCount)
+	dataIdx := 0
+
+	for _, client := range s.Clients {
+		data[dataIdx] = client.CliHelloTime
+	}
+
+	return uint16(math.Round(float64(StdDev(data))))
+}
+
+func (s *Session) GetPingDeviation() uint16 {
+	data := make([]uint16, s.ClientCount)
+	dataIdx := 0
+
+	for _, client := range s.Clients {
+		data[dataIdx] = client.Ping
+	}
+
+	return uint16(math.Round(float64(StdDev(data))))
 }
