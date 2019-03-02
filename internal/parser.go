@@ -25,7 +25,7 @@ func (p *Parser) Parse(packet []byte) {
 	fullPacket := clone(packet)
 	p.Header = fullPacket[:10]
 
-	packetBody := packet[10:]
+	packetBody := packet[10:len(packet) - 5]
 	reader := bufio.NewReader(bytes.NewReader(packetBody))
 
 	for {

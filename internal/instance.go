@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/hex"
 	"net"
 	"sync"
 	"encoding/binary"
@@ -45,8 +46,8 @@ func (i *Instance) RunPacketRead() {
 	for {
 		addr, data := i.readPacket()
 		i.Lock()
-		//fmt.Printf("Packet from %s (%d bytes):\n", addr.String(), len(data))
-		//fmt.Println(hex.Dump(data))
+		fmt.Printf("Packet from %s (%d bytes):\n", addr.String(), len(data))
+		fmt.Println(hex.Dump(data))
 
 		// hello-packet
 		if data[0] == 0x00 && data[3] == 0x06 && len(data) == 75 {

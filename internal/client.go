@@ -1,13 +1,13 @@
 package internal
 
 import (
-	"net"
-	"time"
 	"bytes"
 	"encoding/binary"
-	"fmt"
-	"runtime/debug"
 	"encoding/hex"
+	"fmt"
+	"net"
+	"runtime/debug"
+	"time"
 )
 
 type SyncState uint
@@ -33,6 +33,7 @@ type Client struct {
 	ControlSeq     uint16
 	Parser         *Parser
 	SyncState      SyncState
+	SyncDelay      uint16
 }
 
 func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliHelloTime uint16) *Client {
@@ -152,20 +153,20 @@ func (c *Client) handleInfoBeforeSync(data []byte) {
 // Handles a SYNC-START packet from the client.
 func (c *Client) handleSyncStart(data []byte) {
 	c.SyncState = SyncStateStart
-	//packetTime := binary.BigEndian.Uint16(data[5:7])
-	//packetCliTime := binary.BigEndian.Uint16(data[7:9])
-	//syncCounter := binary.BigEndian.Uint16(data[9:11])
-	//syncValue := binary.BigEndian.Uint16(data[11:13])
+	packetTime := binary.BigEndian.Uint16(data[5:7])
+	packetCliTime := binary.BigEndian.Uint16(data[7:9])
+	syncCounter := binary.BigEndian.Uint16(data[9:11])
+	syncValue := binary.BigEndian.Uint16(data[11:13])
 	sessionId := binary.BigEndian.Uint32(data[16:20])
 	slotByte := data[20]
 
-	//fmt.Println("SYNC-START:")
-	//fmt.Printf("PktTime     = %d\n", packetTime)
-	//fmt.Printf("PktCliTime  = %d\n", packetCliTime)
-	//fmt.Printf("SyncCounter = %d\n", syncCounter)
-	//fmt.Printf("SyncValue   = %d\n", syncValue)
-	//fmt.Printf("SessionId   = %d\n", sessionId)
-	//fmt.Printf("SlotByte    = %x\n", slotByte)
+	fmt.Println("SYNC-START:")
+	fmt.Printf("PktTime     = %d\n", packetTime)
+	fmt.Printf("PktCliTime  = %d\n", packetCliTime)
+	fmt.Printf("SyncCounter = %d\n", syncCounter)
+	fmt.Printf("SyncValue   = %d\n", syncValue)
+	fmt.Printf("SessionId   = %d\n", sessionId)
+	fmt.Printf("SlotByte    = %x\n", slotByte)
 
 	session, exists := c.Instance.Sessions[sessionId]
 
@@ -182,8 +183,9 @@ func (c *Client) handleSyncStart(data []byte) {
 		session.Clients[c.SessionSlot] = c
 		session.ClientCount++
 		//fmt.Printf("* Added client to session!\n")
-		c.SendSyncStart()
+		//c.SendSyncStart()
 	}
+	//
 
 	session.IncrementSyncCount()
 }
@@ -313,7 +315,14 @@ func (c *Client) SendSync() (int, error) {
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime + c.Session.GetHelloTimeDeviation())
+
+	cliHelloTime := c.CliHelloTime
+
+	for _, sc := range c.Session.Clients {
+		cliHelloTime += c.Ping - sc.Ping
+	}
+
+	binary.Write(buffer, binary.BigEndian, cliHelloTime)
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -338,7 +347,13 @@ func (c *Client) SendKeepAlive() (int, error) {
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime+c.Session.GetPingDeviation())
+	cliHelloTime := c.CliHelloTime
+
+	for _, sc := range c.Session.Clients {
+		cliHelloTime += c.Ping - sc.Ping
+	}
+
+	binary.Write(buffer, binary.BigEndian, cliHelloTime)
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -369,7 +384,13 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Time
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime+c.Session.GetPingDeviation())
+	cliHelloTime := c.CliHelloTime
+
+	for _, sc := range c.Session.Clients {
+		cliHelloTime += c.Ping - sc.Ping
+	}
+
+	binary.Write(buffer, binary.BigEndian, cliHelloTime)
 	// Sync-counter
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
@@ -385,16 +406,16 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Sub-packet
 	buffer.WriteByte(0)
 	buffer.WriteByte(6)
-	buffer.WriteByte(0)
+	buffer.WriteByte(c.SessionSlot)
 	binary.Write(buffer, binary.BigEndian, c.Session.SessionId)
 
-	slotsByte := byte(0x00)
+	peerMask := byte(0x00)
 
 	for i := byte(0); i < c.Session.MaxClients; i++ {
-		slotsByte |= 1 << i
+		peerMask |= 1 << i
 	}
 
-	buffer.WriteByte(slotsByte)
+	buffer.WriteByte(peerMask)
 	buffer.WriteByte(0xff)
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
