@@ -311,18 +311,13 @@ func (c *Client) SendHelloResponse() (int, error) {
 func (c *Client) SendSync() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	pingCalc := uint16(0)
-	for _, sc := range c.Session.Clients {
-		pingCalc += c.Ping - sc.Ping
-	}
-
 	buffer.WriteByte(0)
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
 	// Time
-	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff() - pingCalc)
+	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime - pingCalc)
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -343,16 +338,11 @@ func (c *Client) SendSync() (int, error) {
 func (c *Client) SendKeepAlive() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	pingCalc := uint16(0)
-	for _, sc := range c.Session.Clients {
-		pingCalc += c.Ping - sc.Ping
-	}
-
 	buffer.WriteByte(0)
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	buffer.WriteByte(2)
-	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff() - pingCalc)
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime - pingCalc)
+	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -374,11 +364,6 @@ func (c *Client) SendKeepAlive() (int, error) {
 func (c *Client) SendSyncStart() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	pingCalc := uint16(0)
-	for _, sc := range c.Session.Clients {
-		pingCalc += c.Ping - sc.Ping
-	}
-
 	// First packet type
 	buffer.WriteByte(0)
 	// Sequence number
@@ -386,9 +371,9 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Second packet type
 	buffer.WriteByte(2)
 	// Time
-	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff() - pingCalc)
+	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime - pingCalc)
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime + (uint16(1000) * uint16(c.SessionSlot)))
 	// Sync-counter
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
