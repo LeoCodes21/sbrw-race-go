@@ -201,7 +201,7 @@ func (c *Client) handleSync(data []byte) {
 }
 
 func transformPreByteTypeB(client *Client, sessionSlot byte) []byte {
-	packet := client.Parser.GetPlayerPacket(client.GetTimeDiff() - 15)
+	packet := client.Parser.GetPlayerPacket(uint16(int16(client.GetTimeDiff()) - client.getPingDiff()))
 	sequence := client.GetWorldSeq()
 
 	newPacket := make([]byte, len(packet)-3)
@@ -247,7 +247,7 @@ func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) [
 }
 
 func fixPostPacket(client *Client, packet []byte) []byte {
-	timeDiff := client.GetTimeDiff()
+	timeDiff := uint16(int16(client.GetTimeDiff()) - client.getPingDiff())
 
 	bodyPtr := 10
 
@@ -373,7 +373,7 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Time
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime + (uint16(1000) * uint16(c.SessionSlot)) - c.Ping)
+	binary.Write(buffer, binary.BigEndian, uint16(int16(c.CliHelloTime) + (1000 * int16(c.SessionSlot)) - c.getPingDiff()))
 	// Sync-counter
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
@@ -403,4 +403,21 @@ func (c *Client) SendSyncStart() (int, error) {
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 	return c.Send(buffer.Bytes())
+}
+
+// returns ping offset based on other clients
+// e.g. client 1 ping 200, client 2 ping 75, client 3 ping 400, client 4 ping 40
+// f(client3) = (400 - 200) + (400 - 75) + (400 - 40) = 885
+// f(client4) = (40 - 200) + (40 - 75) + (40 - 400) = -555
+// return value should be SUBTRACTED from the expression using it, to make lower-lag clients wait for the higher-lag ones
+func (c *Client) getPingDiff() int16 {
+	var result int16 = 0
+
+	for _, c2 := range c.Session.Clients {
+		if c2.Port() != c.Port() {
+			result += int16(c.Ping - c2.Ping)
+		}
+	}
+
+	return result
 }
