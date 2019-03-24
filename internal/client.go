@@ -317,7 +317,7 @@ func (c *Client) SendSync() (int, error) {
 	// Time
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, uint16(int16(c.CliHelloTime) - c.getPingDiff()))
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
 	} else {
@@ -373,7 +373,7 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Time
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, uint16(int16(c.CliHelloTime) - c.getPingDiff()))
+	binary.Write(buffer, binary.BigEndian, uint16(int16(c.CliHelloTime) + c.getPingDiff()))
 	// Sync-counter
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
