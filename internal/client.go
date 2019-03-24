@@ -389,7 +389,7 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Sub-packet
 	buffer.WriteByte(0)
 	buffer.WriteByte(6)
-	buffer.WriteByte(/*c.SessionSlot*/0)
+	buffer.WriteByte(c.SessionSlot)
 	binary.Write(buffer, binary.BigEndian, c.Session.SessionId)
 
 	peerMask := byte(0x00)
