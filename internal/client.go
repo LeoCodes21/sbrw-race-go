@@ -225,7 +225,7 @@ func transformPreByteTypeB(client *Client, sessionSlot byte) []byte {
 
 func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) []byte {
 	sequence := client.GetWorldSeq()
-	packet = fixPostPacket(client, packet)
+	packet = fixPostPacket(client, clientFrom, packet)
 
 	newPacket := make([]byte, len(packet)-3)
 	newPacket[0] = 1
@@ -246,8 +246,8 @@ func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) [
 	return newPacket
 }
 
-func fixPostPacket(client *Client, packet []byte) []byte {
-	timeDiff := client.GetTimeDiff() - 30
+func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
+	timeDiff := client.GetTimeDiff() - client.Ping
 
 	bodyPtr := 10
 
@@ -299,7 +299,7 @@ func (c *Client) SendHelloResponse() (int, error) {
 	// Second packet type
 	buffer.WriteByte(1)
 	// Time
-	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	// Cli-time
 	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	// CRC
@@ -373,7 +373,7 @@ func (c *Client) SendSyncStart() (int, error) {
 	// Time
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	// Cli-time
-	binary.Write(buffer, binary.BigEndian, uint16(int16(c.CliHelloTime)+ (int16(750) * int16(c.SessionSlot)) - c.getPingDiff()))
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 	// Sync-counter
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
