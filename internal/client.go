@@ -247,7 +247,7 @@ func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) [
 }
 
 func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
-	timeDiff := client.GetTimeDiff() - (fromClient.Ping - client.Ping)
+	timeDiff := client.GetTimeDiff() - (client.Ping - fromClient.Ping)
 	//timeDiff := 0
 
 	bodyPtr := 10
