@@ -432,7 +432,7 @@ func (c *Client) getPingDiff() int16 {
 func (c *Client) doSyncWait() {
 	pingDiff := c.getPingDiff()
 
-	if pingDiff >= 0 {
-		time.Sleep(time.Millisecond * time.Duration(pingDiff))
+	if pingDiff < 0 {
+		time.Sleep(time.Millisecond * time.Duration(-pingDiff))
 	}
 }
