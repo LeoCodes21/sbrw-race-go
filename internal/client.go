@@ -462,5 +462,5 @@ func (c *Client) doSyncWait() (int16, int16) {
 		time.Sleep(time.Millisecond * time.Duration(-pingDiff))
 	}
 
-	return int16(c.CliHelloTime+/*30*/c.Ping), int16(c.GetTimeDiff()+/*30*/c.Ping)
+	return int16(c.CliHelloTime)-pingDiff, int16(c.GetTimeDiff())-pingDiff
 }
