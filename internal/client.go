@@ -246,6 +246,8 @@ func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) [
 	return newPacket
 }
 
+const trollName = "Report Me !"
+
 func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
 	timeDiff := client.GetTimeDiff() - (client.Ping - fromClient.Ping)
 	//timeDiff := 0
@@ -264,6 +266,19 @@ func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
 		if pktId == 0x12 {
 			packet[bodyPtr+2] = byte(timeDiff >> 8)
 			packet[bodyPtr+3] = byte(timeDiff & 0xFF)
+		} else if pktId == 2 {
+			name := string(packet[bodyPtr+3 : bodyPtr+18])
+			//print(name)
+			//
+			//for i := 0; i < 15; i++ {
+			//	packet[bodyPtr + 3 + i] = 0
+			//}
+
+			if len(name) == 0 {
+				for i, c := range trollName {
+					packet[bodyPtr+3+i] = byte(c)
+				}
+			}
 		}
 
 		bodyPtr += int(2 + pktLen)
@@ -462,5 +477,5 @@ func (c *Client) doSyncWait() (int16, int16) {
 		time.Sleep(time.Millisecond * time.Duration(-pingDiff))
 	}
 
-	return int16(c.CliHelloTime)+50, int16(c.GetTimeDiff())+50
+	return int16(c.CliHelloTime) + 50, int16(c.GetTimeDiff()) + 50
 }

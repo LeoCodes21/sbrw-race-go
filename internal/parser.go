@@ -25,7 +25,7 @@ func (p *Parser) Parse(packet []byte) {
 	fullPacket := clone(packet)
 	p.Header = fullPacket[:10]
 
-	packetBody := packet[10:len(packet) - 5]
+	packetBody := packet[10 : len(packet)-5]
 	reader := bufio.NewReader(bytes.NewReader(packetBody))
 
 	for {
@@ -45,11 +45,12 @@ func (p *Parser) Parse(packet []byte) {
 		case 2:
 			p.PlayerInfo = make([]byte, pLen)
 			reader.Read(p.PlayerInfo)
+			//fmt.Println(hex.Dump(p.PlayerInfo))
 			break
 		case 0x12:
 			p.CarState = make([]byte, pLen)
 			reader.Read(p.CarState)
-			break;
+			break
 		default:
 			reader.Read(make([]byte, pLen))
 			break
@@ -75,7 +76,7 @@ func (p *Parser) GetPlayerPacket(timeDiff uint16) []byte {
 		buffer.Write(p.Header)
 		buffer.Write(p.PlayerInfo)
 		buffer.Write(statePosPacket)
-		buffer.Write([]byte{0x01,0x01,0x01,0x01})
+		buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 		return buffer.Bytes()
 	}
@@ -89,7 +90,7 @@ func (p *Parser) GetCarStatePacket(timeDiff uint16) []byte {
 
 		buffer.Write(p.Header)
 		buffer.Write(p.CarState)
-		buffer.Write([]byte{0x01,0x01,0x01,0x01})
+		buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 		return buffer.Bytes()
 	}
