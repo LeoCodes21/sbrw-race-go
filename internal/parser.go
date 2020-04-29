@@ -45,7 +45,13 @@ func (p *Parser) Parse(packet []byte) {
 		case 2:
 			p.PlayerInfo = make([]byte, pLen)
 			reader.Read(p.PlayerInfo)
-			//fmt.Println(hex.Dump(p.PlayerInfo))
+
+			name := string(bytes.Trim(p.PlayerInfo[1:16], "\x00"))
+			if len(name) == 0 {
+				for i, c := range trollName {
+					p.PlayerInfo[1+i] = byte(c)
+				}
+			}
 			break
 		case 0x12:
 			p.CarState = make([]byte, pLen)

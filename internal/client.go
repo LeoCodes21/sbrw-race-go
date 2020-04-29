@@ -267,13 +267,7 @@ func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
 			packet[bodyPtr+2] = byte(timeDiff >> 8)
 			packet[bodyPtr+3] = byte(timeDiff & 0xFF)
 		} else if pktId == 2 {
-			name := string(packet[bodyPtr+3 : bodyPtr+18])
-			//print(name)
-			//
-			//for i := 0; i < 15; i++ {
-			//	packet[bodyPtr + 3 + i] = 0
-			//}
-
+			name := string(bytes.Trim(packet[bodyPtr+3:bodyPtr+18], "\x00"))
 			if len(name) == 0 {
 				for i, c := range trollName {
 					packet[bodyPtr+3+i] = byte(c)
