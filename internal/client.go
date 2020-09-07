@@ -32,6 +32,7 @@ type Client struct {
 	WorldSeq       uint16
 	ControlSeq     uint16
 	Parser         *Parser
+	SyncStopped    bool
 	SyncState      SyncState
 	SyncDelay      uint16
 }
@@ -59,6 +60,9 @@ func (c *Client) IsPlayerInfoBeforeOk() bool {
 func (c *Client) GetWorldSeq() uint16 {
 	tmp := c.WorldSeq
 	c.WorldSeq++
+	if c.WorldSeq > 32767 {
+		c.WorldSeq = 0
+	}
 	return tmp
 }
 
@@ -66,6 +70,9 @@ func (c *Client) GetWorldSeq() uint16 {
 func (c *Client) GetControlSeq() uint16 {
 	tmp := c.ControlSeq
 	c.ControlSeq++
+	if c.ControlSeq > 32767 {
+		c.ControlSeq = 0
+	}
 	return tmp
 }
 
@@ -196,8 +203,12 @@ func (c *Client) handleSync(data []byte) {
 		return
 	}
 
-	c.SyncState = SyncStateSync
-	c.Session.IncrementSyncCount()
+	if c.SyncStopped {
+		c.SyncState = SyncStateSync
+		c.Session.IncrementSyncCount()
+	} else {
+		c.SyncStopped = true
+	}
 }
 
 func transformPreByteTypeB(client *Client, sessionSlot byte) []byte {
@@ -217,8 +228,10 @@ func transformPreByteTypeB(client *Client, sessionSlot byte) []byte {
 		iDataTmp++
 	}
 
-	newPacket[4] = 0xff
-	newPacket[5] = 0xff
+	if !client.SyncStopped {
+		newPacket[4] = 0xff
+		newPacket[5] = 0xff
+	}
 
 	return newPacket
 }
@@ -240,8 +253,10 @@ func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) [
 		iDataTmp++
 	}
 
-	newPacket[4] = 0xff
-	newPacket[5] = 0xff
+	if !client.SyncStopped {
+		newPacket[4] = 0xff
+		newPacket[5] = 0xff
+	}
 
 	return newPacket
 }
