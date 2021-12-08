@@ -132,7 +132,6 @@ func (c *Client) handleInfoPackets(data []byte) {
 		return
 	}
 
-	//fmt.Printf("Packet from client %d[%d]: %s\n", c.SessionSlot, c.Session.SessionId, hex.EncodeToString(data))
 	fragmentIndex := 0
 
 	for i := 1; i < len(data)-1; {
@@ -145,8 +144,6 @@ func (c *Client) handleInfoPackets(data []byte) {
 		fragmentData := data[i+3 : i+3+fragmentLength]
 		i += 3 + fragmentLength
 
-		//fmt.Printf("\tparts[%d]: %s\n", fragmentIndex, hex.EncodeToString(fragmentData))
-
 		for _, c2 := range c.Session.Clients {
 			if c2.Port() != c.Port() {
 				c2.Send(transformInfoPacket(c2, c, fragmentData))
@@ -154,6 +151,12 @@ func (c *Client) handleInfoPackets(data []byte) {
 		}
 
 		fragmentIndex++
+	}
+
+	for _, c2 := range c.Session.Clients {
+		if c2.Port() != c.Port() {
+			c2.PeerSequences[c.SessionSlot]++
+		}
 	}
 }
 
@@ -203,7 +206,6 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 
 	if recipient.SyncStopped {
 		binary.BigEndian.PutUint16(newData[4:6], recipient.PeerSequences[sender.SessionSlot])
-		recipient.PeerSequences[sender.SessionSlot]++
 	} else {
 		binary.BigEndian.PutUint16(newData[4:6], 0xffff)
 	}
