@@ -203,6 +203,8 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 		binary.BigEndian.PutUint16(newData[4:6], 0xffff)
 	}
 
+	binary.BigEndian.PutUint16(newData[6:8], 0xffff)
+
 	newData[len(newData)-5] = 0xff
 	newData[len(newData)-4] = 0xDE
 	newData[len(newData)-3] = 0xAD
