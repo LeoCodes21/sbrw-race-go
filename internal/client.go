@@ -205,7 +205,8 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 	copy(newData[4:], data[2:dataLen])
 
 	if recipient.SyncStopped {
-		binary.BigEndian.PutUint16(newData[4:6], recipient.PeerSequences[sender.SessionSlot])
+		copy(newData[4:6], data[0:2])
+		//binary.BigEndian.PutUint16(newData[4:6], recipient.PeerSequences[sender.SessionSlot])
 	} else {
 		binary.BigEndian.PutUint16(newData[4:6], 0xffff)
 	}
