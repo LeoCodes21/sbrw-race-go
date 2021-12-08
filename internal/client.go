@@ -111,7 +111,7 @@ func (c *Client) HandlePacket(data []byte) {
 	if len(data) == 26 && data[3] == 0x07 {
 		c.handleSyncStart(data)
 	} else if len(data) == 22 && data[3] == 0x07 {
-		c.handleSync(data)
+		c.handleSync()
 	} else if len(data) == 18 && data[3] == 0x07 {
 		if c.Session == nil {
 			fmt.Println("NIL SESSION")
@@ -221,29 +221,17 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 	return newData
 }
 
-// Handles a SYNC-START packet from the client.
 func (c *Client) handleSyncStart(data []byte) {
 	c.SyncState = SyncStateStart
-	//packetTime := binary.BigEndian.Uint16(data[5:7])
-	//packetCliTime := binary.BigEndian.Uint16(data[7:9])
-	//syncCounter := binary.BigEndian.Uint16(data[9:11])
-	//syncValue := binary.BigEndian.Uint16(data[11:13])
 	sessionId := binary.BigEndian.Uint32(data[16:20])
 	slotByte := data[20]
-
-	//fmt.Println("SYNC-START:")
-	//fmt.Printf("PktTime     = %d\n", packetTime)
-	//fmt.Printf("PktCliTime  = %d\n", packetCliTime)
-	//fmt.Printf("SyncCounter = %d\n", syncCounter)
-	//fmt.Printf("SyncValue   = %d\n", syncValue)
-	//fmt.Printf("SessionId   = %d\n", sessionId)
-	//fmt.Printf("SlotByte    = %x\n", slotByte)
 
 	session, exists := c.Instance.Sessions[sessionId]
 
 	if !exists {
 		c.Instance.Sessions[sessionId] = NewSession(sessionId, (slotByte&0x0F)>>1)
 		session = c.Instance.Sessions[sessionId]
+		c.SendSyncStart()
 	}
 
 	c.SessionSlot = slotByte >> 5
@@ -257,7 +245,7 @@ func (c *Client) handleSyncStart(data []byte) {
 	session.IncrementSyncCount()
 }
 
-func (c *Client) handleSync(data []byte) {
+func (c *Client) handleSync() {
 	if c.Session == nil {
 		fmt.Println("NIL SESSION")
 		return
@@ -289,8 +277,6 @@ func (c *Client) SendSyncResponse() {
 	c.SyncState = SyncStateNone
 }
 
-// Sends a HELLO response packet to the client.
-// The packet is 12 bytes long.
 func (c *Client) SendHelloResponse() (int, error) {
 	buffer := &bytes.Buffer{}
 
@@ -313,38 +299,14 @@ func (c *Client) SendHelloResponse() (int, error) {
 func (c *Client) SendSync() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	//ht, td := c.doSyncWait()
-
 	// First packet type
 	buffer.WriteByte(0)
 	// Sequence number
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	// Second packet type
 	buffer.WriteByte(2)
-	// Time
-	//binary.Write(buffer, binary.BigEndian, td)
-	// Cli-time
-	//binary.Write(buffer, binary.BigEndian, ht)
 
-	//c.doSyncWait()
-	//
-	//buffer.WriteByte(0)
-	//binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	//buffer.WriteByte(2)
-	//// Time
-	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	//// Cli-time
-	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
-	}
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
-	}
+	c.WriteSyncHeader(buffer)
 
 	buffer.Write([]byte{0x01, 0x03, 0x00, 0x4f, 0xed, 0xff})
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
@@ -355,44 +317,20 @@ func (c *Client) SendSync() (int, error) {
 func (c *Client) SendKeepAlive() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	//ht, td := c.doSyncWait()
-
 	// First packet type
 	buffer.WriteByte(0)
 	// Sequence number
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	// Second packet type
 	buffer.WriteByte(2)
-	// Time
-	//binary.Write(buffer, binary.BigEndian, td)
-	// Cli-time
-	//binary.Write(buffer, binary.BigEndian, ht)
 
-	//c.doSyncWait()
-	//
-	//buffer.WriteByte(0)
-	//binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	//buffer.WriteByte(2)
-	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
-	}
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
-	}
+	c.WriteSyncHeader(buffer)
 
 	buffer.Write([]byte{0xff, 0x01, 0x01, 0x01, 0x01})
 
 	return c.Send(buffer.Bytes())
 }
 
-// Sends a SYNC-START response packet to the client.
-// The packet is 25 bytes long.
 func (c *Client) SendSyncStart() (int, error) {
 	buffer := &bytes.Buffer{}
 
@@ -402,21 +340,8 @@ func (c *Client) SendSyncStart() (int, error) {
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	// Second packet type
 	buffer.WriteByte(2)
-	// Time
-	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	// Cli-time
-	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
-	// Sync-counter
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
-	}
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
-	}
+
+	c.WriteSyncHeader(buffer)
 
 	// Sub-packet
 	buffer.WriteByte(0)
@@ -437,6 +362,14 @@ func (c *Client) SendSyncStart() (int, error) {
 	return c.Send(buffer.Bytes())
 }
 
+func (c *Client) WriteSyncHeader(buffer *bytes.Buffer) {
+	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
+	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
+
+	binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
+	binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
+}
+
 // returns ping offset based on other clients
 // e.g. client 1 ping 200, client 2 ping 75, client 3 ping 400, client 4 ping 40
 // f(client3) = (400 - 200) + (400 - 75) + (400 - 40) = 885
@@ -452,14 +385,4 @@ func (c *Client) getPingDiff() int16 {
 	}
 
 	return result
-}
-
-func (c *Client) doSyncWait() (int16, int16) {
-	pingDiff := c.getPingDiff()
-
-	if pingDiff < 0 {
-		time.Sleep(time.Millisecond * time.Duration(-pingDiff))
-	}
-
-	return int16(c.CliHelloTime) + 50, int16(c.GetTimeDiff()) + 50
 }

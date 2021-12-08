@@ -37,10 +37,6 @@ func (s *Session) IncrementSyncCount() {
 
 		s.SyncCount++
 	}
-
-	if s.SyncCount > 16 {
-		s.SyncCount = 1
-	}
 }
 
 func (s *Session) IsAllPlayerInfoBeforeOk() bool {
