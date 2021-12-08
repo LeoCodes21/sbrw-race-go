@@ -349,13 +349,7 @@ func (c *Client) SendSyncStart() (int, error) {
 	buffer.WriteByte(c.SessionSlot)
 	binary.Write(buffer, binary.BigEndian, c.Session.SessionId)
 
-	peerMask := byte(0x00)
-
-	for i := byte(0); i < c.Session.MaxClients; i++ {
-		peerMask |= 1 << i
-	}
-
-	buffer.WriteByte(peerMask)
+	buffer.WriteByte((1 << c.Session.MaxClients) - 1)
 	buffer.WriteByte(0xff)
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
