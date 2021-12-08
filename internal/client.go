@@ -229,13 +229,13 @@ func (c *Client) handleSyncStart(data []byte) {
 
 	session, exists := c.Instance.Sessions[sessionId]
 
-	c.SessionSlot = slotByte >> 5
-	c.Session = session
-
 	if !exists {
 		c.Instance.Sessions[sessionId] = NewSession(sessionId, (slotByte&0x0F)>>1)
 		session = c.Instance.Sessions[sessionId]
 	}
+
+	c.SessionSlot = slotByte >> 5
+	c.Session = session
 
 	if _, inSession := session.Clients[c.SessionSlot]; !inSession {
 		session.Clients[c.SessionSlot] = c
