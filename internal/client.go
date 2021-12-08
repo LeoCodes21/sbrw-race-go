@@ -130,6 +130,9 @@ func (c *Client) handleInfoPackets(data []byte) {
 		return
 	}
 
+	fmt.Printf("Packet from client %d[%d]: %s\n", c.SessionSlot, c.Session.SessionId, hex.EncodeToString(data))
+	fragmentIndex := 0
+
 	for i := 1; i < len(data)-1; {
 		fragmentLength := int(binary.BigEndian.Uint16(data[i+1 : i+3]))
 
@@ -140,15 +143,20 @@ func (c *Client) handleInfoPackets(data []byte) {
 		fragmentData := data[i+3 : i+3+fragmentLength]
 		i += 3 + fragmentLength
 
+		fmt.Printf("\tparts[%d]: %s\n", fragmentIndex, hex.EncodeToString(fragmentData))
+
 		for _, c2 := range c.Session.Clients {
 			if c2.Port() != c.Port() {
 				c2.Send(transformInfoPacket(c2, c, fragmentData))
 			}
 		}
+
+		fragmentIndex += 1
 	}
 }
 
 func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte {
+	fmt.Printf("transforming packet from client %d to client %d: %s\n", sender.SessionSlot, recipient.SessionSlot, hex.EncodeToString(data))
 	newData := make([]byte, 2 /* type ID + opponent ID */ +len(data))
 
 	// type ID
@@ -172,26 +180,27 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 	newData[len(newData)-2] = 0x03
 	newData[len(newData)-1] = 0x04
 
+	fmt.Printf("transformed packet from client %d to client %d: %s\n", sender.SessionSlot, recipient.SessionSlot, hex.EncodeToString(newData))
 	return newData
 }
 
 // Handles a SYNC-START packet from the client.
 func (c *Client) handleSyncStart(data []byte) {
 	c.SyncState = SyncStateStart
-	packetTime := binary.BigEndian.Uint16(data[5:7])
-	packetCliTime := binary.BigEndian.Uint16(data[7:9])
-	syncCounter := binary.BigEndian.Uint16(data[9:11])
-	syncValue := binary.BigEndian.Uint16(data[11:13])
+	//packetTime := binary.BigEndian.Uint16(data[5:7])
+	//packetCliTime := binary.BigEndian.Uint16(data[7:9])
+	//syncCounter := binary.BigEndian.Uint16(data[9:11])
+	//syncValue := binary.BigEndian.Uint16(data[11:13])
 	sessionId := binary.BigEndian.Uint32(data[16:20])
 	slotByte := data[20]
 
-	fmt.Println("SYNC-START:")
-	fmt.Printf("PktTime     = %d\n", packetTime)
-	fmt.Printf("PktCliTime  = %d\n", packetCliTime)
-	fmt.Printf("SyncCounter = %d\n", syncCounter)
-	fmt.Printf("SyncValue   = %d\n", syncValue)
-	fmt.Printf("SessionId   = %d\n", sessionId)
-	fmt.Printf("SlotByte    = %x\n", slotByte)
+	//fmt.Println("SYNC-START:")
+	//fmt.Printf("PktTime     = %d\n", packetTime)
+	//fmt.Printf("PktCliTime  = %d\n", packetCliTime)
+	//fmt.Printf("SyncCounter = %d\n", syncCounter)
+	//fmt.Printf("SyncValue   = %d\n", syncValue)
+	//fmt.Printf("SessionId   = %d\n", sessionId)
+	//fmt.Printf("SlotByte    = %x\n", slotByte)
 
 	session, exists := c.Instance.Sessions[sessionId]
 
