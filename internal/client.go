@@ -35,6 +35,7 @@ type Client struct {
 	SyncStopped    bool
 	SyncState      SyncState
 	SyncDelay      uint16
+	PeerSequences  []uint16
 }
 
 func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliHelloTime uint16) *Client {
@@ -49,6 +50,7 @@ func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliH
 		WorldSeq:       0,
 		ControlSeq:     0,
 		SyncState:      SyncStateNone,
+		PeerSequences:  make([]uint16, 0),
 	}
 }
 
@@ -60,9 +62,9 @@ func (c *Client) IsPlayerInfoBeforeOk() bool {
 func (c *Client) GetWorldSeq() uint16 {
 	tmp := c.WorldSeq
 	c.WorldSeq++
-	if c.WorldSeq > 32767 {
-		c.WorldSeq = 0
-	}
+	//if c.WorldSeq > 32767 {
+	//	c.WorldSeq = 0
+	//}
 	return tmp
 }
 
@@ -70,9 +72,9 @@ func (c *Client) GetWorldSeq() uint16 {
 func (c *Client) GetControlSeq() uint16 {
 	tmp := c.ControlSeq
 	c.ControlSeq++
-	if c.ControlSeq > 32767 {
-		c.ControlSeq = 0
-	}
+	//if c.ControlSeq > 32767 {
+	//	c.ControlSeq = 0
+	//}
 	return tmp
 }
 
@@ -147,7 +149,8 @@ func (c *Client) handleInfoPackets(data []byte) {
 
 		for _, c2 := range c.Session.Clients {
 			if c2.Port() != c.Port() {
-				c2.Send(transformInfoPacket(c2, c, fragmentData))
+				c2.Send(transformInfoPacket(c2, c, fragmentData, c2.PeerSequences[c.SessionSlot]))
+				c2.PeerSequences[c.SessionSlot]++
 			}
 		}
 
@@ -186,7 +189,7 @@ func fixPostPacket(client *Client, fromClient *Client, packet []byte) ([]byte, i
 	return packet, bodyPtr
 }
 
-func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte {
+func transformInfoPacket(recipient *Client, sender *Client, data []byte, peerSeq uint16) []byte {
 	data, dataLen := fixPostPacket(recipient, sender, clone(data))
 	newData := make([]byte, 2 /* type ID + opponent ID */ +dataLen+1 /* terminator */ +4 /* checksum */)
 
@@ -199,7 +202,9 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 
 	copy(newData[4:], data[2:dataLen])
 
-	if !recipient.SyncStopped {
+	if recipient.SyncStopped {
+		binary.BigEndian.PutUint16(newData[4:6], peerSeq)
+	} else {
 		binary.BigEndian.PutUint16(newData[4:6], 0xffff)
 	}
 
@@ -237,6 +242,7 @@ func (c *Client) handleSyncStart(data []byte) {
 	if !exists {
 		c.Instance.Sessions[sessionId] = NewSession(sessionId, (slotByte&0x0F)>>1)
 		session = c.Instance.Sessions[sessionId]
+		c.PeerSequences = make([]uint16, session.MaxClients)
 	}
 
 	c.SessionSlot = slotByte >> 5
