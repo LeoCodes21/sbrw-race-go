@@ -155,6 +155,37 @@ func (c *Client) handleInfoPackets(data []byte) {
 	}
 }
 
+func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
+	timeDiff := client.GetTimeDiff() - (client.Ping - fromClient.Ping)
+	bodyPtr := 8
+
+	for {
+		pktId := packet[bodyPtr]
+
+		if pktId == 0xff {
+			break
+		}
+
+		pktLen := packet[bodyPtr+1]
+
+		if pktId == 0x12 {
+			packet[bodyPtr+2] = byte(timeDiff >> 8)
+			packet[bodyPtr+3] = byte(timeDiff & 0xFF)
+		} else if pktId == 2 {
+			name := string(bytes.Trim(packet[bodyPtr+3:bodyPtr+18], "\x00"))
+			if len(name) == 0 {
+				for i, c := range trollName {
+					packet[bodyPtr+3+i] = byte(c)
+				}
+			}
+		}
+
+		bodyPtr += int(2 + pktLen)
+	}
+
+	return packet
+}
+
 func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte {
 	fmt.Printf("transforming packet from client %d to client %d: %s\n", sender.SessionSlot, recipient.SessionSlot, hex.EncodeToString(data))
 	newData := make([]byte, 2 /* type ID + opponent ID */ +len(data))
@@ -180,6 +211,7 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 	newData[len(newData)-2] = 0x03
 	newData[len(newData)-1] = 0x04
 
+	newData = fixPostPacket(recipient, sender, newData)
 	fmt.Printf("transformed packet from client %d to client %d: %s\n", sender.SessionSlot, recipient.SessionSlot, hex.EncodeToString(newData))
 	return newData
 }
