@@ -130,7 +130,7 @@ func (c *Client) handleInfoPackets(data []byte) {
 		return
 	}
 
-	fmt.Printf("Packet from client %d[%d]: %s\n", c.SessionSlot, c.Session.SessionId, hex.EncodeToString(data))
+	//fmt.Printf("Packet from client %d[%d]: %s\n", c.SessionSlot, c.Session.SessionId, hex.EncodeToString(data))
 	fragmentIndex := 0
 
 	for i := 1; i < len(data)-1; {
@@ -143,7 +143,7 @@ func (c *Client) handleInfoPackets(data []byte) {
 		fragmentData := data[i+3 : i+3+fragmentLength]
 		i += 3 + fragmentLength
 
-		fmt.Printf("\tparts[%d]: %s\n", fragmentIndex, hex.EncodeToString(fragmentData))
+		//fmt.Printf("\tparts[%d]: %s\n", fragmentIndex, hex.EncodeToString(fragmentData))
 
 		for _, c2 := range c.Session.Clients {
 			if c2.Port() != c.Port() {
@@ -151,13 +151,13 @@ func (c *Client) handleInfoPackets(data []byte) {
 			}
 		}
 
-		fragmentIndex += 1
+		fragmentIndex++
 	}
 }
 
-func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
+func fixPostPacket(client *Client, fromClient *Client, packet []byte) ([]byte, int) {
 	timeDiff := client.GetTimeDiff() - (client.Ping - fromClient.Ping)
-	bodyPtr := 8
+	bodyPtr := 6
 
 	for {
 		pktId := packet[bodyPtr]
@@ -183,36 +183,32 @@ func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
 		bodyPtr += int(2 + pktLen)
 	}
 
-	return packet
+	return packet, bodyPtr
 }
 
 func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte {
-	fmt.Printf("transforming packet from client %d to client %d: %s\n", sender.SessionSlot, recipient.SessionSlot, hex.EncodeToString(data))
-	newData := make([]byte, 2 /* type ID + opponent ID */ +len(data))
+	data, dataLen := fixPostPacket(recipient, sender, clone(data))
+	newData := make([]byte, 2 /* type ID + opponent ID */ +dataLen+1 /* terminator */ +4 /* checksum */)
 
 	// type ID
 	newData[0] = 1
 	// opponent ID
 	newData[1] = sender.SessionSlot
-	// sequence
+	// local_seq
 	binary.BigEndian.PutUint16(newData[2:4], recipient.GetWorldSeq())
 
-	// packet
-	for i := 2; i < len(data)-5; i++ {
-		newData[i+2] = data[i]
+	copy(newData[4:], data[2:dataLen])
+
+	if !recipient.SyncStopped {
+		binary.BigEndian.PutUint16(newData[4:6], 0xffff)
 	}
 
-	// terminator
 	newData[len(newData)-5] = 0xff
+	newData[len(newData)-4] = 0xDE
+	newData[len(newData)-3] = 0xAD
+	newData[len(newData)-2] = 0xBE
+	newData[len(newData)-1] = 0xEF
 
-	// checksum
-	newData[len(newData)-4] = 0x01
-	newData[len(newData)-3] = 0x02
-	newData[len(newData)-2] = 0x03
-	newData[len(newData)-1] = 0x04
-
-	newData = fixPostPacket(recipient, sender, newData)
-	fmt.Printf("transformed packet from client %d to client %d: %s\n", sender.SessionSlot, recipient.SessionSlot, hex.EncodeToString(newData))
 	return newData
 }
 
