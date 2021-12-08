@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/leocodes21/sbrw-race-go/internal"
 	"fmt"
+	"github.com/LeoCodes21/sbrw-race-go/internal"
 	"os"
 	"os/signal"
 )
