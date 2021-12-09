@@ -31,6 +31,7 @@ type Client struct {
 	SessionSlot    byte
 	WorldSeq       uint16
 	ControlSeq     uint16
+	SyncSeq        uint16
 	Parser         *Parser
 	SyncStopped    bool
 	SyncState      SyncState
@@ -51,6 +52,7 @@ func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliH
 		ControlSeq:     0,
 		SyncState:      SyncStateNone,
 		PeerSequences:  make([]uint16, 8),
+		SyncSeq:        1,
 	}
 }
 
@@ -62,9 +64,6 @@ func (c *Client) IsPlayerInfoBeforeOk() bool {
 func (c *Client) GetWorldSeq() uint16 {
 	tmp := c.WorldSeq
 	c.WorldSeq++
-	//if c.WorldSeq > 32767 {
-	//	c.WorldSeq = 0
-	//}
 	return tmp
 }
 
@@ -72,9 +71,12 @@ func (c *Client) GetWorldSeq() uint16 {
 func (c *Client) GetControlSeq() uint16 {
 	tmp := c.ControlSeq
 	c.ControlSeq++
-	//if c.ControlSeq > 32767 {
-	//	c.ControlSeq = 0
-	//}
+	return tmp
+}
+
+func (c *Client) GetSyncSeq() uint16 {
+	tmp := c.SyncSeq
+	c.SyncSeq++
 	return tmp
 }
 
@@ -149,7 +151,14 @@ func (c *Client) handleInfoPackets(data []byte) {
 
 	for _, c2 := range c.Session.Clients {
 		if c2.Port() != c.Port() {
-			baseSeq := c2.GetWorldSeq()
+			var baseSeq uint16
+
+			if c2.SyncStopped {
+				baseSeq = c2.GetWorldSeq()
+			} else {
+				baseSeq = 0xffff
+			}
+
 			for _, fragment := range fragments {
 				transformed := transformInfoPacket(c2, c, fragment, baseSeq)
 				c2.Send(transformed)
@@ -202,14 +211,7 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte, seq1 ui
 
 	copy(newData[4:], data[2:dataLen])
 
-	if recipient.SyncStopped {
-		//copy(newData[4:6], data[0:2])
-		//binary.BigEndian.PutUint16(newData[4:6], recipient.PeerSequences[sender.SessionSlot])
-		binary.BigEndian.PutUint16(newData[4:6], seq1)
-	} else {
-		binary.BigEndian.PutUint16(newData[4:6], 0xffff)
-	}
-
+	binary.BigEndian.PutUint16(newData[4:6], seq1)
 	binary.BigEndian.PutUint16(newData[6:8], 0xffff)
 
 	newData[len(newData)-5] = 0xff
@@ -298,14 +300,6 @@ func (c *Client) SendHelloResponse() (int, error) {
 
 func (c *Client) SendSync() (int, error) {
 	buffer := &bytes.Buffer{}
-
-	// First packet type
-	buffer.WriteByte(0)
-	// Sequence number
-	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
-	buffer.WriteByte(2)
-
 	c.WriteSyncHeader(buffer)
 
 	buffer.Write([]byte{0x01, 0x03, 0x00, 0x4f, 0xed, 0xff})
@@ -316,14 +310,6 @@ func (c *Client) SendSync() (int, error) {
 
 func (c *Client) SendKeepAlive() (int, error) {
 	buffer := &bytes.Buffer{}
-
-	// First packet type
-	buffer.WriteByte(0)
-	// Sequence number
-	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
-	buffer.WriteByte(2)
-
 	c.WriteSyncHeader(buffer)
 
 	buffer.Write([]byte{0xff, 0x01, 0x01, 0x01, 0x01})
@@ -333,14 +319,6 @@ func (c *Client) SendKeepAlive() (int, error) {
 
 func (c *Client) SendSyncStart() (int, error) {
 	buffer := &bytes.Buffer{}
-
-	// First packet type
-	buffer.WriteByte(0)
-	// Sequence number
-	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
-	buffer.WriteByte(2)
-
 	c.WriteSyncHeader(buffer)
 
 	// Sub-packet
@@ -357,9 +335,19 @@ func (c *Client) SendSyncStart() (int, error) {
 }
 
 func (c *Client) WriteSyncHeader(buffer *bytes.Buffer) {
+	controlSeq := c.GetControlSeq()
+	syncSeq := c.GetSyncSeq()
+
+	// First packet type
+	buffer.WriteByte(0)
+	// Sequence number
+	binary.Write(buffer, binary.BigEndian, controlSeq)
+	// Second packet type
+	buffer.WriteByte(2)
+
 	binary.Write(buffer, binary.BigEndian, c.GetTimeDiff())
 	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
 
-	binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
-	binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
+	binary.Write(buffer, binary.BigEndian, syncSeq)
+	binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-syncSeq)))
 }
