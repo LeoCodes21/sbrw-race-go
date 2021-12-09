@@ -132,7 +132,7 @@ func (c *Client) handleInfoPackets(data []byte) {
 		return
 	}
 
-	fragmentIndex := 0
+	fragments := make([][]byte, 0)
 
 	for i := 1; i < len(data)-1; {
 		fragmentLength := int(binary.BigEndian.Uint16(data[i+1 : i+3]))
@@ -144,18 +144,16 @@ func (c *Client) handleInfoPackets(data []byte) {
 		fragmentData := data[i+3 : i+3+fragmentLength]
 		i += 3 + fragmentLength
 
-		for _, c2 := range c.Session.Clients {
-			if c2.Port() != c.Port() {
-				c2.Send(transformInfoPacket(c2, c, fragmentData))
-			}
-		}
-
-		fragmentIndex++
+		fragments = append(fragments, fragmentData)
 	}
 
 	for _, c2 := range c.Session.Clients {
 		if c2.Port() != c.Port() {
-			c2.PeerSequences[c.SessionSlot]++
+			baseSeq := c2.GetWorldSeq()
+			for _, fragment := range fragments {
+				transformed := transformInfoPacket(c2, c, fragment, baseSeq)
+				c2.Send(transformed)
+			}
 		}
 	}
 }
@@ -191,7 +189,7 @@ func fixPostPacket(client *Client, fromClient *Client, packet []byte) ([]byte, i
 	return packet, bodyPtr
 }
 
-func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte {
+func transformInfoPacket(recipient *Client, sender *Client, data []byte, seq1 uint16) []byte {
 	data, dataLen := fixPostPacket(recipient, sender, clone(data))
 	newData := make([]byte, 2 /* type ID + opponent ID */ +dataLen+1 /* terminator */ +4 /* checksum */)
 
@@ -206,7 +204,8 @@ func transformInfoPacket(recipient *Client, sender *Client, data []byte) []byte 
 
 	if recipient.SyncStopped {
 		//copy(newData[4:6], data[0:2])
-		binary.BigEndian.PutUint16(newData[4:6], recipient.PeerSequences[sender.SessionSlot])
+		//binary.BigEndian.PutUint16(newData[4:6], recipient.PeerSequences[sender.SessionSlot])
+		binary.BigEndian.PutUint16(newData[4:6], seq1)
 	} else {
 		binary.BigEndian.PutUint16(newData[4:6], 0xffff)
 	}
