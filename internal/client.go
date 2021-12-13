@@ -143,7 +143,7 @@ func (c *Client) handlePeerToPeer(data []byte) {
 			panic(fmt.Sprintf("Attempted to send message from client %d[%d] to nonexistent peer %d", c.Session.SessionId, c.SessionSlot, peerId))
 		}
 
-		fmt.Printf("Sending packet from client %s to peer %s\n", c.Address.String(), peerClient.Address.String())
+		//fmt.Printf("Sending packet from client %s to peer %s\n", c.Address.String(), peerClient.Address.String())
 
 		transformedForPeer := peerClient.transformPeerPacket(c, peerMsg)
 		peerClient.Send(transformedForPeer)
@@ -292,7 +292,7 @@ func (c *Client) handleSync(data []byte) {
 const trollName = "Report Me !"
 
 func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
-	timeDiff := client.GetTimeDiff() - (client.Ping - fromClient.Ping)
+	timeDiff := client.GetTimeDiff() /*- (client.Ping - fromClient.Ping)*/
 	//timeDiff := 0
 	packet = clone(packet)
 	bodyPtr := 6
@@ -307,7 +307,7 @@ func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
 		pktLen := packet[bodyPtr+1]
 
 		if pktId == 0x12 {
-			fmt.Println("fixing car state time")
+			//fmt.Println("fixing car state time")
 			packet[bodyPtr+2] = byte(timeDiff >> 8)
 			packet[bodyPtr+3] = byte(timeDiff & 0xFF)
 		} else if pktId == 2 {
