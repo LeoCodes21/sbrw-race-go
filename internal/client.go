@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"runtime/debug"
+	"sort"
 	"time"
 )
 
@@ -35,6 +36,7 @@ type Client struct {
 	SyncStopped    bool
 	SyncState      SyncState
 	SyncDelay      uint16
+	Peers          map[byte]*Client
 }
 
 func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliHelloTime uint16) *Client {
@@ -49,6 +51,7 @@ func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliH
 		WorldSeq:       0,
 		ControlSeq:     0,
 		SyncState:      SyncStateNone,
+		Peers:          make(map[byte]*Client),
 	}
 }
 
@@ -117,44 +120,50 @@ func (c *Client) HandlePacket(data []byte) {
 			c.SyncState = SyncStateKeepAlive
 			c.Session.IncrementSyncCount()
 		}
-	} else if len(data) > 16 && data[0] == 1 && data[6] == 0xff && data[7] == 0xff && data[8] == 0xff && data[9] == 0xff {
-		c.handleInfoBeforeSync(data)
-	} else if len(data) > 16 && data[0] == 1 {
-		c.handleInfoAfterSync(data)
+	} else if data[0] == 1 {
+		c.handlePeerToPeer(data)
 	} else {
 		fmt.Println("UNKNOWN PACKET")
 	}
 }
 
-func (c *Client) handleInfoAfterSync(data []byte) {
+func (c *Client) handlePeerToPeer(data []byte) {
 	if c.Session == nil {
-		fmt.Println("NIL SESSION")
 		return
 	}
 
-	for _, c2 := range c.Session.Clients {
-		if c2.Port() != c.Port() {
-			c2.Send(transformPostByteTypeB(c2, data, c))
+	for i := 1; i < len(data)-1; {
+		peerId := data[i]
+		peerMsgSize := int(binary.BigEndian.Uint16(data[i+1 : i+3]))
+		peerMsg := data[i+3 : i+3+peerMsgSize]
+
+		peerClient, peerClientExists := c.Peers[peerId]
+
+		if !peerClientExists {
+			panic(fmt.Sprintf("Attempted to send message from client %d[%d] to nonexistent peer %d", c.Session.SessionId, c.SessionSlot, peerId))
 		}
+
+		fmt.Printf("Sending packet from client %s to peer %s\n", c.Address.String(), peerClient.Address.String())
+
+		transformedForPeer := peerClient.transformPeerPacket(c, peerMsg)
+		peerClient.Send(transformedForPeer)
+
+		i += 3 + peerMsgSize
 	}
 }
 
-// Handles a player-info-before-sync packet from the client.
-func (c *Client) handleInfoBeforeSync(data []byte) {
-	c.Parser.Parse(data)
+func (c *Client) transformPeerPacket(sender *Client, data []byte) []byte {
+	newPacket := make([]byte, len(data)+2)
+	newPacket[0] = 1
+	newPacket[1] = sender.SessionSlot
+	copy(newPacket[2:], fixPostPacket(c, sender, data))
 
-	if c.Session == nil {
-		fmt.Println("NIL SESSION")
-		return
+	if !c.SyncStopped {
+		newPacket[4] = 0xff
+		newPacket[5] = 0xff
 	}
 
-	if c.Session.IsAllPlayerInfoBeforeOk() {
-		for _, c2 := range c.Session.Clients {
-			if c2.Port() != c.Port() {
-				c2.Send(transformPreByteTypeB(c, c.SessionSlot))
-			}
-		}
-	}
+	return newPacket
 }
 
 // Handles a SYNC-START packet from the client.
@@ -189,6 +198,25 @@ func (c *Client) handleSyncStart(data []byte) {
 	if _, inSession := session.Clients[c.SessionSlot]; !inSession {
 		session.Clients[c.SessionSlot] = c
 		session.ClientCount++
+		if session.ClientCount == session.MaxClients {
+			for _, client := range session.Clients {
+				fmt.Printf("Generating peers for client %s\n", client.Address.String())
+				otherClients := make([]*Client, 0)
+				for _, otherClient := range session.Clients {
+					if otherClient == client {
+						continue
+					}
+					otherClients = append(otherClients, otherClient)
+				}
+				sort.SliceStable(otherClients, func(i, j int) bool {
+					return otherClients[i].SessionSlot < otherClients[j].SessionSlot
+				})
+				for i, otherClient := range otherClients {
+					fmt.Printf("\tPeer %d is %s\n", i, otherClient.Address.String())
+					client.Peers[byte(i)] = otherClient
+				}
+			}
+		}
 		//fmt.Printf("* Added client to session!\n")
 		//c.SendSyncStart()
 	}
@@ -211,63 +239,63 @@ func (c *Client) handleSync(data []byte) {
 	}
 }
 
-func transformPreByteTypeB(client *Client, sessionSlot byte) []byte {
-	packet := client.Parser.GetPlayerPacket(client.GetTimeDiff())
-	sequence := client.GetWorldSeq()
-
-	newPacket := make([]byte, len(packet)-3)
-	newPacket[0] = 1
-	newPacket[1] = sessionSlot
-	newPacket[2] = byte(sequence >> 8)
-	newPacket[3] = byte(sequence & 0xFF)
-
-	iDataTmp := 4
-
-	for i := 6; i < len(packet)-1; i++ {
-		newPacket[iDataTmp] = packet[i]
-		iDataTmp++
-	}
-
-	if !client.SyncStopped {
-		newPacket[4] = 0xff
-		newPacket[5] = 0xff
-	}
-
-	return newPacket
-}
-
-func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) []byte {
-	sequence := client.GetWorldSeq()
-	packet = fixPostPacket(client, clientFrom, packet)
-
-	newPacket := make([]byte, len(packet)-3)
-	newPacket[0] = 1
-	newPacket[1] = clientFrom.SessionSlot
-	newPacket[2] = byte(sequence >> 8)
-	newPacket[3] = byte(sequence & 0xFF)
-
-	iDataTmp := 4
-
-	for i := 6; i < len(packet)-1; i++ {
-		newPacket[iDataTmp] = packet[i]
-		iDataTmp++
-	}
-
-	if !client.SyncStopped {
-		newPacket[4] = 0xff
-		newPacket[5] = 0xff
-	}
-
-	return newPacket
-}
+//func transformPreByteTypeB(client *Client, sessionSlot byte) []byte {
+//	packet := client.Parser.GetPlayerPacket(client.GetTimeDiff())
+//	sequence := client.GetWorldSeq()
+//
+//	newPacket := make([]byte, len(packet)-3)
+//	newPacket[0] = 1
+//	newPacket[1] = sessionSlot
+//	newPacket[2] = byte(sequence >> 8)
+//	newPacket[3] = byte(sequence & 0xFF)
+//
+//	iDataTmp := 4
+//
+//	for i := 6; i < len(packet)-1; i++ {
+//		newPacket[iDataTmp] = packet[i]
+//		iDataTmp++
+//	}
+//
+//	if !client.SyncStopped {
+//		newPacket[4] = 0xff
+//		newPacket[5] = 0xff
+//	}
+//
+//	return newPacket
+//}
+//
+//func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) []byte {
+//	sequence := client.GetWorldSeq()
+//	packet = fixPostPacket(client, clientFrom, packet)
+//
+//	newPacket := make([]byte, len(packet)-3)
+//	newPacket[0] = 1
+//	newPacket[1] = clientFrom.SessionSlot
+//	newPacket[2] = byte(sequence >> 8)
+//	newPacket[3] = byte(sequence & 0xFF)
+//
+//	iDataTmp := 4
+//
+//	for i := 6; i < len(packet)-1; i++ {
+//		newPacket[iDataTmp] = packet[i]
+//		iDataTmp++
+//	}
+//
+//	if !client.SyncStopped {
+//		newPacket[4] = 0xff
+//		newPacket[5] = 0xff
+//	}
+//
+//	return newPacket
+//}
 
 const trollName = "Report Me !"
 
 func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
 	timeDiff := client.GetTimeDiff() - (client.Ping - fromClient.Ping)
 	//timeDiff := 0
-
-	bodyPtr := 10
+	packet = clone(packet)
+	bodyPtr := 6
 
 	for {
 		pktId := packet[bodyPtr]
@@ -279,6 +307,7 @@ func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
 		pktLen := packet[bodyPtr+1]
 
 		if pktId == 0x12 {
+			fmt.Println("fixing car state time")
 			packet[bodyPtr+2] = byte(timeDiff >> 8)
 			packet[bodyPtr+3] = byte(timeDiff & 0xFF)
 		} else if pktId == 2 {
