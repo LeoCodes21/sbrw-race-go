@@ -156,7 +156,7 @@ func (c *Client) transformPeerPacket(sender *Client, data []byte) []byte {
 	newPacket := make([]byte, len(data)+2)
 	newPacket[0] = 1
 	newPacket[1] = sender.SessionSlot
-	copy(newPacket[2:], fixPostPacket(c, sender, data))
+	copy(newPacket[2:] /*fixPostPacket(c, sender, data)*/, data)
 
 	if !c.SyncStopped {
 		newPacket[4] = 0xff
