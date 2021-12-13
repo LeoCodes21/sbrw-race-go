@@ -400,7 +400,11 @@ func (c *Client) SendSync() (int, error) {
 		binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
 	}
 
-	buffer.Write([]byte{0x01, 0x03, 0x00, 0x4f, 0xed, 0xff})
+	buffer.WriteByte(0x01)
+	buffer.WriteByte(0x03)
+	buffer.WriteByte(0x00)
+	binary.Write(buffer, binary.LittleEndian, c.CliHelloTime+c.GetTimeDiff()+c.Ping)
+	buffer.WriteByte(0xff)
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 	return c.Send(buffer.Bytes())
