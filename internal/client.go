@@ -30,9 +30,7 @@ type Client struct {
 	Ping           uint16
 	Session        *Session
 	SessionSlot    byte
-	WorldSeq       uint16
 	ControlSeq     uint16
-	Parser         *Parser
 	SyncStopped    bool
 	SyncState      SyncState
 	SyncDelay      uint16
@@ -47,29 +45,13 @@ func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliH
 		Instance:       instance,
 		JoinedTime:     time.Now(),
 		LastPacketTime: time.Now(),
-		Parser:         NewParser(),
-		WorldSeq:       0,
 		ControlSeq:     0,
 		SyncState:      SyncStateNone,
 		Peers:          make(map[byte]*Client),
 	}
 }
 
-func (c *Client) IsPlayerInfoBeforeOk() bool {
-	return c.Parser.IsOk()
-}
-
-// Returns the client's latest world-packet sequence number.
-func (c *Client) GetWorldSeq() uint16 {
-	tmp := c.WorldSeq
-	c.WorldSeq++
-	if c.WorldSeq > 32767 {
-		c.WorldSeq = 0
-	}
-	return tmp
-}
-
-// Returns the client's latest control-packet sequence number.
+// GetControlSeq gets the client's latest control-packet sequence number.
 func (c *Client) GetControlSeq() uint16 {
 	tmp := c.ControlSeq
 	c.ControlSeq++
@@ -143,8 +125,6 @@ func (c *Client) handlePeerToPeer(data []byte) {
 			panic(fmt.Sprintf("Attempted to send message from client %d[%d] to nonexistent peer %d", c.Session.SessionId, c.SessionSlot, peerId))
 		}
 
-		//fmt.Printf("Sending packet from client %s to peer %s\n", c.Address.String(), peerClient.Address.String())
-
 		transformedForPeer := peerClient.transformPeerPacket(c, peerMsg)
 		peerClient.Send(transformedForPeer)
 
@@ -158,38 +138,20 @@ func (c *Client) transformPeerPacket(sender *Client, data []byte) []byte {
 	newPacket[1] = sender.SessionSlot
 	copy(newPacket[2:], fixPostPacket(c, sender, data))
 
-	if !c.SyncStopped {
-		newPacket[4] = 0xff
-		newPacket[5] = 0xff
-	}
-
 	return newPacket
 }
 
 // Handles a SYNC-START packet from the client.
 func (c *Client) handleSyncStart(data []byte) {
 	c.SyncState = SyncStateStart
-	packetTime := binary.BigEndian.Uint16(data[5:7])
-	packetCliTime := binary.BigEndian.Uint16(data[7:9])
-	syncCounter := binary.BigEndian.Uint16(data[9:11])
-	syncValue := binary.BigEndian.Uint16(data[11:13])
 	sessionId := binary.BigEndian.Uint32(data[16:20])
 	slotByte := data[20]
-
-	fmt.Println("SYNC-START:")
-	fmt.Printf("PktTime     = %d\n", packetTime)
-	fmt.Printf("PktCliTime  = %d\n", packetCliTime)
-	fmt.Printf("SyncCounter = %d\n", syncCounter)
-	fmt.Printf("SyncValue   = %d\n", syncValue)
-	fmt.Printf("SessionId   = %d\n", sessionId)
-	fmt.Printf("SlotByte    = %x\n", slotByte)
 
 	session, exists := c.Instance.Sessions[sessionId]
 
 	if !exists {
 		c.Instance.Sessions[sessionId] = NewSession(sessionId, (slotByte&0x0F)>>1)
 		session = c.Instance.Sessions[sessionId]
-		//fmt.Printf("* Created new session!\n")
 	}
 
 	c.SessionSlot = slotByte >> 5
@@ -219,10 +181,7 @@ func (c *Client) handleSyncStart(data []byte) {
 
 			session.Ready = true
 		}
-		//fmt.Printf("* Added client to session!\n")
-		//c.SendSyncStart()
 	}
-	//
 
 	session.IncrementSyncCount()
 }
@@ -240,56 +199,6 @@ func (c *Client) handleSync(data []byte) {
 		c.SyncStopped = true
 	}
 }
-
-//func transformPreByteTypeB(client *Client, sessionSlot byte) []byte {
-//	packet := client.Parser.GetPlayerPacket(client.GetTimeDiff())
-//	sequence := client.GetWorldSeq()
-//
-//	newPacket := make([]byte, len(packet)-3)
-//	newPacket[0] = 1
-//	newPacket[1] = sessionSlot
-//	newPacket[2] = byte(sequence >> 8)
-//	newPacket[3] = byte(sequence & 0xFF)
-//
-//	iDataTmp := 4
-//
-//	for i := 6; i < len(packet)-1; i++ {
-//		newPacket[iDataTmp] = packet[i]
-//		iDataTmp++
-//	}
-//
-//	if !client.SyncStopped {
-//		newPacket[4] = 0xff
-//		newPacket[5] = 0xff
-//	}
-//
-//	return newPacket
-//}
-//
-//func transformPostByteTypeB(client *Client, packet []byte, clientFrom *Client) []byte {
-//	sequence := client.GetWorldSeq()
-//	packet = fixPostPacket(client, clientFrom, packet)
-//
-//	newPacket := make([]byte, len(packet)-3)
-//	newPacket[0] = 1
-//	newPacket[1] = clientFrom.SessionSlot
-//	newPacket[2] = byte(sequence >> 8)
-//	newPacket[3] = byte(sequence & 0xFF)
-//
-//	iDataTmp := 4
-//
-//	for i := 6; i < len(packet)-1; i++ {
-//		newPacket[iDataTmp] = packet[i]
-//		iDataTmp++
-//	}
-//
-//	if !client.SyncStopped {
-//		newPacket[4] = 0xff
-//		newPacket[5] = 0xff
-//	}
-//
-//	return newPacket
-//}
 
 const trollName = "Report Me !"
 
@@ -367,8 +276,6 @@ func (c *Client) SendHelloResponse() (int, error) {
 func (c *Client) SendSync() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	//ht, td := c.doSyncWait()
-
 	// First packet type
 	buffer.WriteByte(0)
 	// Sequence number
@@ -376,18 +283,8 @@ func (c *Client) SendSync() (int, error) {
 	// Second packet type
 	buffer.WriteByte(2)
 	// Time
-	//binary.Write(buffer, binary.BigEndian, td)
-	// Cli-time
-	//binary.Write(buffer, binary.BigEndian, ht)
-
-	//c.doSyncWait()
-	//
-	//buffer.WriteByte(0)
-	//binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	//buffer.WriteByte(2)
-	//// Time
 	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	//// Cli-time
+	// Cli-time
 	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
 	if c.Session.SyncCount == 0 {
 		buffer.Write([]byte{0xFF, 0xFF})
@@ -413,24 +310,12 @@ func (c *Client) SendSync() (int, error) {
 func (c *Client) SendKeepAlive() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	//ht, td := c.doSyncWait()
-
 	// First packet type
 	buffer.WriteByte(0)
 	// Sequence number
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
 	// Second packet type
 	buffer.WriteByte(2)
-	// Time
-	//binary.Write(buffer, binary.BigEndian, td)
-	// Cli-time
-	//binary.Write(buffer, binary.BigEndian, ht)
-
-	//c.doSyncWait()
-	//
-	//buffer.WriteByte(0)
-	//binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	//buffer.WriteByte(2)
 	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
 	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
 	if c.Session.SyncCount == 0 {
@@ -493,31 +378,4 @@ func (c *Client) SendSyncStart() (int, error) {
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 	return c.Send(buffer.Bytes())
-}
-
-// returns ping offset based on other clients
-// e.g. client 1 ping 200, client 2 ping 75, client 3 ping 400, client 4 ping 40
-// f(client3) = (400 - 200) + (400 - 75) + (400 - 40) = 885
-// f(client4) = (40 - 200) + (40 - 75) + (40 - 400) = -555
-// return value should be SUBTRACTED from the expression using it, to make lower-lag clients wait for the higher-lag ones
-func (c *Client) getPingDiff() int16 {
-	var result int16 = 0
-
-	for _, c2 := range c.Session.Clients {
-		if c2.Port() != c.Port() {
-			result += int16(c.Ping - c2.Ping)
-		}
-	}
-
-	return result
-}
-
-func (c *Client) doSyncWait() (int16, int16) {
-	pingDiff := c.getPingDiff()
-
-	if pingDiff < 0 {
-		time.Sleep(time.Millisecond * time.Duration(-pingDiff))
-	}
-
-	return int16(c.CliHelloTime) + 50, int16(c.GetTimeDiff()) + 50
 }
