@@ -12,6 +12,7 @@ type Session struct {
 	SessionId     uint32
 	SyncCount     uint32
 	SyncedClients uint32
+	Ready         bool
 }
 
 func NewSession(sessionId uint32, maxClients byte) *Session {
@@ -22,6 +23,7 @@ func NewSession(sessionId uint32, maxClients byte) *Session {
 		SyncCount:     1,
 		ClientCount:   0,
 		SyncedClients: 0,
+		Ready:         false,
 	}
 }
 
@@ -41,14 +43,4 @@ func (s *Session) IncrementSyncCount() {
 	if s.SyncCount > 16 {
 		s.SyncCount = 1
 	}
-}
-
-func (s *Session) IsAllPlayerInfoBeforeOk() bool {
-	for _, client := range s.Clients {
-		if !client.IsPlayerInfoBeforeOk() {
-			return false
-		}
-	}
-
-	return true
 }

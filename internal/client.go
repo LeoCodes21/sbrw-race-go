@@ -128,7 +128,7 @@ func (c *Client) HandlePacket(data []byte) {
 }
 
 func (c *Client) handlePeerToPeer(data []byte) {
-	if c.Session == nil {
+	if c.Session == nil || !c.Session.Ready {
 		return
 	}
 
@@ -216,6 +216,8 @@ func (c *Client) handleSyncStart(data []byte) {
 					client.Peers[byte(i)] = otherClient
 				}
 			}
+
+			session.Ready = true
 		}
 		//fmt.Printf("* Added client to session!\n")
 		//c.SendSyncStart()
