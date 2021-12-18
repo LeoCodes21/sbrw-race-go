@@ -276,28 +276,10 @@ func (c *Client) SendHelloResponse() (int, error) {
 func (c *Client) SendSync() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	// First packet type
-	buffer.WriteByte(0)
-	// Sequence number
-	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
-	buffer.WriteByte(2)
-	// Time
-	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	// Cli-time
-	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
-	}
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
-	}
+	writeSyncPacketHeader(c, buffer)
 
-	buffer.Write([]byte{0x01, 0x03, 0x00, 0x4f, 0xed, 0xff})
+	buffer.Write([]byte{0x01, 0x03, 0x00, 0x4f, 0xed})
+	buffer.WriteByte(0xff)
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 	return c.Send(buffer.Bytes())
@@ -306,26 +288,10 @@ func (c *Client) SendSync() (int, error) {
 func (c *Client) SendKeepAlive() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	// First packet type
-	buffer.WriteByte(0)
-	// Sequence number
-	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
-	buffer.WriteByte(2)
-	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
-	}
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
-	}
+	writeSyncPacketHeader(c, buffer)
 
-	buffer.Write([]byte{0xff, 0x01, 0x01, 0x01, 0x01})
+	buffer.WriteByte(0xff)
+	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 	return c.Send(buffer.Bytes())
 }
@@ -335,27 +301,7 @@ func (c *Client) SendKeepAlive() (int, error) {
 func (c *Client) SendSyncStart() (int, error) {
 	buffer := &bytes.Buffer{}
 
-	// First packet type
-	buffer.WriteByte(0)
-	// Sequence number
-	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
-	buffer.WriteByte(2)
-	// Time
-	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	// Cli-time
-	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
-	// Sync-counter
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
-	}
-	if c.Session.SyncCount == 0 {
-		buffer.Write([]byte{0xFF, 0xFF})
-	} else {
-		binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
-	}
+	writeSyncPacketHeader(c, buffer)
 
 	// Sub-packet
 	buffer.WriteByte(0)
@@ -374,4 +320,20 @@ func (c *Client) SendSyncStart() (int, error) {
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
 	return c.Send(buffer.Bytes())
+}
+
+func writeSyncPacketHeader(c *Client, buffer *bytes.Buffer) {
+	// First packet type
+	buffer.WriteByte(0)
+	// Sequence number
+	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
+	// Second packet type
+	buffer.WriteByte(2)
+	// Time
+	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
+	// Cli-time
+	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
+	// Sync-counter
+	binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
+	binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))
 }
