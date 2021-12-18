@@ -55,9 +55,6 @@ func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliH
 func (c *Client) GetControlSeq() uint16 {
 	tmp := c.ControlSeq
 	c.ControlSeq++
-	if c.ControlSeq > 32767 {
-		c.ControlSeq = 0
-	}
 	return tmp
 }
 
