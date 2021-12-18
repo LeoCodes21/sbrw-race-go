@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -28,8 +29,8 @@ func NewInstance(listener *net.UDPConn) *Instance {
 	return &Instance{
 		listener: listener,
 		buffer:   make([]byte, 1024),
-		Clients:make(map[int]*Client),
-		Sessions:make(map[uint32]*Session),
+		Clients:  make(map[int]*Client),
+		Sessions: make(map[uint32]*Session),
 	}
 }
 
@@ -38,33 +39,39 @@ type Instance struct {
 	listener *net.UDPConn
 	buffer   []byte
 	Clients  map[int]*Client
-	Sessions  map[uint32]*Session
+	Sessions map[uint32]*Session
 }
 
 func (i *Instance) RunPacketRead() {
 	for {
-		addr, data := i.readPacket()
-		i.Lock()
-		//fmt.Printf("Packet from %s (%d bytes):\n", addr.String(), len(data))
-		//fmt.Println(hex.Dump(data))
+		addr, data, err := i.readPacket()
 
-		// hello-packet
+		if err != nil {
+			panic(fmt.Sprintf("Error while trying to read packet from listener: %s", err))
+		}
+
+		i.Lock()
+
 		if data[0] == 0x00 && data[3] == 0x06 && len(data) == 75 {
 			i.Clients[addr.Port] = NewClient(i, i.listener, addr, binary.BigEndian.Uint16(data[69:71]))
-			i.Clients[addr.Port].SendHelloResponse()
+			_, err = i.Clients[addr.Port].SendHelloResponse()
 		} else {
 			if _, exists := i.Clients[addr.Port]; exists {
-				i.Clients[addr.Port].HandlePacket(data)
+				err = i.Clients[addr.Port].HandlePacket(data)
 			} else {
-				fmt.Println("UNKNOWN CLIENT")
+				err = fmt.Errorf("unknown client")
 			}
+		}
+
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error while processing packet: %s\n", err)
 		}
 
 		i.Unlock()
 	}
 }
 
-func (i *Instance) readPacket() (*net.UDPAddr, []byte) {
-	pktLen, addr, _ := i.listener.ReadFromUDP(i.buffer)
-	return addr, i.buffer[:pktLen]
+func (i *Instance) readPacket() (*net.UDPAddr, []byte, error) {
+	pktLen, addr, err := i.listener.ReadFromUDP(i.buffer)
+	return addr, i.buffer[:pktLen], err
 }
