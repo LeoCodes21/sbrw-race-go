@@ -22,7 +22,7 @@ const (
 
 type Client struct {
 	Address        *net.UDPAddr
-	CliHelloTime   uint16
+	TickOffset     int16
 	Connection     *net.UDPConn
 	Instance       *Instance
 	JoinedTime     time.Time
@@ -37,11 +37,11 @@ type Client struct {
 	Peers          map[byte]*Client
 }
 
-func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, cliHelloTime uint16) *Client {
+func NewClient(instance *Instance, conn *net.UDPConn, address *net.UDPAddr, initTick uint16) *Client {
 	return &Client{
 		Address:        address,
 		Connection:     conn,
-		CliHelloTime:   cliHelloTime,
+		TickOffset:     int16(initTick - instance.GetServerTick()),
 		Instance:       instance,
 		JoinedTime:     time.Now(),
 		LastPacketTime: time.Now(),
@@ -56,11 +56,6 @@ func (c *Client) GetControlSeq() uint16 {
 	tmp := c.ControlSeq
 	c.ControlSeq++
 	return tmp
-}
-
-// Returns the difference between the current time and the time the client joined, in milliseconds.
-func (c *Client) GetTimeDiff() uint16 {
-	return uint16(time.Now().Sub(c.JoinedTime).Seconds() * 1000)
 }
 
 // Returns the client's remote port number.
@@ -116,10 +111,10 @@ func (c *Client) handlePeerToPeer(data []byte) error {
 		return fmt.Errorf("received P2P message from client not in any session")
 	}
 
-	if !c.Session.Ready {
-		// todo: should we bother returning an error here? this is technically expected behavior
-		return fmt.Errorf("received P2P message from client in session that's not ready")
-	}
+	//if !c.Session.Ready {
+	//	// todo: should we bother returning an error here? this is technically expected behavior
+	//	return fmt.Errorf("received P2P message from client in session that's not ready")
+	//}
 
 	for i := 1; i < len(data)-1; {
 		peerId := data[i]
@@ -128,15 +123,13 @@ func (c *Client) handlePeerToPeer(data []byte) error {
 
 		peerClient, peerClientExists := c.Peers[peerId]
 
-		if !peerClientExists {
-			return fmt.Errorf("attempted to send message to nonexistent peer %d", peerId)
-		}
+		if peerClientExists {
+			transformedForPeer := peerClient.transformPeerPacket(c, peerMsg)
+			_, sendErr := peerClient.Send(transformedForPeer)
 
-		transformedForPeer := peerClient.transformPeerPacket(c, peerMsg)
-		_, sendErr := peerClient.Send(transformedForPeer)
-
-		if sendErr != nil {
-			return sendErr
+			if sendErr != nil {
+				return sendErr
+			}
 		}
 
 		i += 3 + peerMsgSize
@@ -149,7 +142,7 @@ func (c *Client) transformPeerPacket(sender *Client, data []byte) []byte {
 	newPacket := make([]byte, len(data)+2)
 	newPacket[0] = 1
 	newPacket[1] = sender.SessionSlot
-	copy(newPacket[2:], fixPostPacket(c, sender, data))
+	copy(newPacket[2:] /*fixPostPacket(c, sender, data)*/, data)
 
 	return newPacket
 }
@@ -216,42 +209,6 @@ func (c *Client) handleSync(data []byte) error {
 	return nil
 }
 
-const trollName = "Report Me !"
-
-func fixPostPacket(client *Client, fromClient *Client, packet []byte) []byte {
-	timeDiff := client.GetTimeDiff() /*- (client.Ping - fromClient.Ping)*/
-	//timeDiff := 0
-	packet = clone(packet)
-	bodyPtr := 6
-
-	for {
-		pktId := packet[bodyPtr]
-
-		if pktId == 0xff {
-			break
-		}
-
-		pktLen := packet[bodyPtr+1]
-
-		if pktId == 0x12 {
-			//fmt.Println("fixing car state time")
-			packet[bodyPtr+2] = byte(timeDiff >> 8)
-			packet[bodyPtr+3] = byte(timeDiff & 0xFF)
-		} else if pktId == 2 {
-			name := string(bytes.Trim(packet[bodyPtr+3:bodyPtr+18], "\x00"))
-			if len(name) == 0 {
-				for i, c := range trollName {
-					packet[bodyPtr+3+i] = byte(c)
-				}
-			}
-		}
-
-		bodyPtr += int(2 + pktLen)
-	}
-
-	return packet
-}
-
 func (c *Client) SendSyncResponse() {
 	switch c.SyncState {
 	case SyncStateStart:
@@ -277,12 +234,13 @@ func (c *Client) SendHelloResponse() (int, error) {
 	buffer.WriteByte(0)
 	// Counter
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
+	// Packet flag (only tick diff)
 	buffer.WriteByte(1)
-	// Time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
-	// Cli-time
-	binary.Write(buffer, binary.BigEndian, c.CliHelloTime)
+	// Server tick
+	serverTick := c.Instance.GetServerTick()
+	binary.Write(buffer, binary.BigEndian, serverTick)
+	// Tick diff
+	binary.Write(buffer, binary.BigEndian, c.TickOffset)
 	// CRC
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
@@ -294,7 +252,10 @@ func (c *Client) SendSync() (int, error) {
 
 	writeSyncPacketHeader(c, buffer)
 
-	buffer.Write([]byte{0x01, 0x03, 0x00, 0x4f, 0xed})
+	buffer.WriteByte(0x01) // Message ID: countdown proposal
+	buffer.WriteByte(0x03) // Message size: 3 bytes
+	buffer.WriteByte(0x00) // unknown
+	binary.Write(buffer, binary.LittleEndian, c.Instance.GetServerTick()+3000)
 	buffer.WriteByte(0xff)
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 
@@ -343,12 +304,13 @@ func writeSyncPacketHeader(c *Client, buffer *bytes.Buffer) {
 	buffer.WriteByte(0)
 	// Sequence number
 	binary.Write(buffer, binary.BigEndian, c.GetControlSeq())
-	// Second packet type
+	// Packet flag (tick diff + sync bits)
 	buffer.WriteByte(2)
-	// Time
-	binary.Write(buffer, binary.BigEndian, int16(c.GetTimeDiff()))
-	// Cli-time
-	binary.Write(buffer, binary.BigEndian, int16(c.CliHelloTime))
+	// Server tick
+	serverTick := c.Instance.GetServerTick()
+	binary.Write(buffer, binary.BigEndian, serverTick)
+	// Tick diff
+	binary.Write(buffer, binary.BigEndian, c.TickOffset)
 	// Sync-counter
 	binary.Write(buffer, binary.BigEndian, uint16(c.Session.SyncCount))
 	binary.Write(buffer, binary.BigEndian, uint16(0xFFFF)&^(1<<(16-c.Session.SyncCount)))

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 )
 
 // Start the UDP server and begin listening for packets
@@ -54,6 +55,7 @@ func (i *Instance) RunPacketRead() {
 
 		if data[0] == 0x00 && data[3] == 0x06 && len(data) == 75 {
 			i.Clients[addr.Port] = NewClient(i, i.listener, addr, binary.BigEndian.Uint16(data[69:71]))
+			fmt.Printf("Created client for %s, tick offset is %d\n", addr.String(), i.Clients[addr.Port].TickOffset)
 			_, err = i.Clients[addr.Port].SendHelloResponse()
 		} else {
 			if _, exists := i.Clients[addr.Port]; exists {
@@ -74,4 +76,8 @@ func (i *Instance) RunPacketRead() {
 func (i *Instance) readPacket() (*net.UDPAddr, []byte, error) {
 	pktLen, addr, err := i.listener.ReadFromUDP(i.buffer)
 	return addr, i.buffer[:pktLen], err
+}
+
+func (i *Instance) GetServerTick() uint16 {
+	return uint16(time.Now().UnixMilli())
 }
