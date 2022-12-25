@@ -187,6 +187,7 @@ func (c *Client) handleSyncStart(data []byte) error {
 				}
 			}
 
+			session.ProposedCountdownTime = c.Instance.GetServerTick() + 5000
 			session.Ready = true
 		}
 	}
@@ -257,7 +258,7 @@ func (c *Client) SendSync() (int, error) {
 	buffer.WriteByte(0x01) // Message ID: countdown proposal
 	buffer.WriteByte(0x03) // Message size: 3 bytes
 	buffer.WriteByte(0x00) // unknown
-	binary.Write(buffer, binary.LittleEndian, c.Instance.GetServerTick()+3000)
+	binary.Write(buffer, binary.LittleEndian, c.Session.ProposedCountdownTime)
 	buffer.WriteByte(0xff)
 	buffer.Write([]byte{0x01, 0x01, 0x01, 0x01})
 

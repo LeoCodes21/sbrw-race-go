@@ -6,24 +6,26 @@ import (
 
 type Session struct {
 	sync.Mutex
-	Clients       map[byte]*Client
-	ClientCount   byte
-	MaxClients    byte
-	SessionId     uint32
-	SyncCount     uint32
-	SyncedClients uint32
-	Ready         bool
+	Clients               map[byte]*Client
+	ClientCount           byte
+	MaxClients            byte
+	SessionId             uint32
+	SyncCount             uint32
+	SyncedClients         uint32
+	ProposedCountdownTime uint16
+	Ready                 bool
 }
 
 func NewSession(sessionId uint32, maxClients byte) *Session {
 	return &Session{
-		Clients:       make(map[byte]*Client, maxClients),
-		MaxClients:    maxClients,
-		SessionId:     sessionId,
-		SyncCount:     1,
-		ClientCount:   0,
-		SyncedClients: 0,
-		Ready:         false,
+		Clients:               make(map[byte]*Client, maxClients),
+		MaxClients:            maxClients,
+		SessionId:             sessionId,
+		SyncCount:             1,
+		ClientCount:           0,
+		SyncedClients:         0,
+		Ready:                 false,
+		ProposedCountdownTime: 0,
 	}
 }
 
