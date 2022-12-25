@@ -151,16 +151,18 @@ func (c *Client) transformPeerPacket(sender *Client, data []byte) []byte {
 func (c *Client) handleSyncStart(data []byte) error {
 	c.SyncState = SyncStateStart
 	sessionId := binary.BigEndian.Uint32(data[16:20])
-	slotByte := data[20]
+	sessionJoinInfo := data[20]
+	sessionSlot := (sessionJoinInfo & 0b111_00000) >> 5
+	sessionSize := (sessionJoinInfo & 0b000_1111_0) >> 1
 
 	session, exists := c.Instance.Sessions[sessionId]
 
 	if !exists {
-		c.Instance.Sessions[sessionId] = NewSession(sessionId, (slotByte&0x0F)>>1)
+		c.Instance.Sessions[sessionId] = NewSession(sessionId, sessionSize)
 		session = c.Instance.Sessions[sessionId]
 	}
 
-	c.SessionSlot = slotByte >> 5
+	c.SessionSlot = sessionSlot
 	c.Session = session
 
 	if _, inSession := session.Clients[c.SessionSlot]; !inSession {
